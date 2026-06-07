@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生成测试PDF</title>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF测试文件生成器</h1>
+
+        <div class="form-group">
+            <label>文件名称</label>
+            <input type="text" id="fileName" value="test-document" placeholder="test-document">
+        </div>
+
+        <div class="form-group">
+            <label>页数</label>
+            <input type="number" id="pageCount" value="5" min="1" max="50">
+        </div>
+
+        <div class="form-group">
+            <label>页面标题</label>
+            <input type="text" id="pageTitle" value="测试文档" placeholder="测试文档">
+        </div>
+
+        <div class="form-group">
+            <label>页面内容</label>
+            <textarea id="pageContent" rows="5" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">这是一个测试PDF文档，用于测试水印添加功能。</textarea>
+        </div>
+
+        <button onclick="generatePDF()">生成PDF</button>
+        <button onclick="generateMultiplePDFs()">生成多个测试PDF</button>
+
+        <div class="info" id="info"></div>
+    </div>
+
+    <script>
+        const { PDFDocument, rgb, StandardFonts } = PDFLib;
+
+        async function generatePDF() {
+            const fileName = document.getElementById('fileName').value || 'test-document';
+            const pageCount = parseInt(document.getElementById('pageCount').value) || 5;
+            const pageTitle = document.getElementById('pageTitle').value || '测试文档';
+            const pageContent = document.getElementById('pageContent').value || '测试内容';
+
+            try {
+                const pdfDoc = await PDFDocument.create();
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+                for (let i = 1; i <= pageCount; i++) {
+                    const page = pdfDoc.addPage([595.28, 841.89]); // A4
+                    const { width, height } = page.getSize();
+
+                    // 标题
+                    page.drawText(`${pageTitle} - 第 ${i} 页`, {
+                        x: 50,
+                        y: height - 80,
+                        size: 24,
+                        font: boldFont,
+                        color: rgb(0.2, 0.2, 0.8),
+                    });
+
+                    // 内容
+                    const lines = wrapText(pageContent, 80);
+                    let y = height - 150;
+                    lines.forEach((line, index) => {
+                        if (index < 30) {
+                            page.drawText(line, {
+                                x: 50,
+                                y: y,
+                                size: 12,
+                                font: font,
+                                color: rgb(0.3, 0.3, 0.3),
+                            });
+                            y -= 20;
+                        }
+                    });
+
+                    // 页码
+                    page.drawText(`第 ${i} 页 / 共 ${pageCount} 页`, {
+                        x: width / 2 - 50,
+                        y: 30,
+                        size: 10,
+                        font: font,
+                        color: rgb(0.5, 0.5, 0.5),
+                    });
+
+                    // 添加一些装饰
+                    page.drawLine({
+                        start: { x: 50, y: height - 100 },
+                        end: { x: width - 50, y: height - 100 },
+                        thickness: 2,
+                        color: rgb(0.2, 0.2, 0.8),
+                    });
+
+                    page.drawLine({
+                        start: { x: 50, y: 60 },
+                        end: { x: width - 50, y: 60 },
+                        thickness: 1,
+                        color: rgb(0.8, 0.8, 0.8),
+                    });
+                }
+
+                const pdfBytes = await pdfDoc.save();
+                downloadPDF(pdfBytes, `${fileName}.pdf`);
+
+                document.getElementById('info').innerHTML = `
+                    <strong>✅ 成功生成PDF！</strong><br>
+                    文件名: ${fileName}.pdf<br>
+                    页数: ${pageCount}<br>
+                    大小: ${formatBytes(pdfBytes.byteLength)}
+                `;
+            } catch (error) {
+                document.getElementById('info').innerHTML = `
+                    <strong style="color: red;">❌ 生成失败</strong><br>
+                    ${error.message}
+                `;
+            }
+        }
+
+        async function generateMultiplePDFs() {
+            const titles = ['机密文档', '项目报告', '技术手册', '用户指南', '产品说明'];
+            const contents = [
+                '这是机密文档，包含重要信息。',
+                '项目进展报告，详细记录了各个阶段的工作。',
+                '技术手册，包含了所有技术细节。',
+                '用户操作指南，帮助用户快速上手。',
+                '产品功能说明，详细介绍各项功能。'
+            ];
+
+            for (let i = 0; i < titles.length; i++) {
+                const pdfDoc = await PDFDocument.create();
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+                const pageCount = Math.floor(Math.random() * 5) + 3; // 3-7页
+
+                for (let j = 1; j <= pageCount; j++) {
+                    const page = pdfDoc.addPage([595.28, 841.89]);
+                    const { width, height } = page.getSize();
+
+                    page.drawText(`${titles[i]} - 第 ${j} 页`, {
+                        x: 50,
+                        y: height - 80,
+                        size: 24,
+                        font: boldFont,
+                        color: rgb(0.2, 0.2, 0.8),
+                    });
+
+                    const lines = wrapText(contents[i], 80);
+                    let y = height - 150;
+                    lines.forEach((line, index) => {
+                        if (index < 25) {
+                            page.drawText(line, {
+                                x: 50,
+                                y: y,
+                                size: 12,
+                                font: font,
+                                color: rgb(0.3, 0.3, 0.3),
+                            });
+                            y -= 20;
+                        }
+                    });
+
+                    page.drawText(`第 ${j} 页 / 共 ${pageCount} 页`, {
+                        x: width / 2 - 50,
+                        y: 30,
+                        size: 10,
+                        font: font,
+                        color: rgb(0.5, 0.5, 0.5),
+                    });
+                }
+
+                const pdfBytes = await pdfDoc.save();
+                downloadPDF(pdfBytes, `test-${i + 1}-${titles[i]}.pdf`);
+            }
+
+            document.getElementById('info').innerHTML = `
+                <strong>✅ 成功生成 ${titles.length} 个测试PDF文件！</strong><br>
+                文件列表:<br>
+                ${titles.map((t, i) => `• test-${i + 1}-${t}.pdf`).join('<br>')}
+            `;
+        }
+
+        function wrapText(text, maxChars) {
+            const words = text.split('');
+            const lines = [];
+            let currentLine = '';
+
+            for (const char of words) {
+                if (currentLine.length < maxChars) {
+                    currentLine += char;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = char;
+                }
+            }
+            if (currentLine) {
+                lines.push(currentLine);
+            }
+
+            return lines.length > 0 ? lines : [text];
+        }
+
+        function downloadPDF(bytes, fileName) {
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>
